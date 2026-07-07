@@ -175,9 +175,9 @@
                 </div>
                 
                 <div class="flex flex-col h-full pl-1 lg:pl-2">
-                    <div class="flex flex-col flex-1 min-h-0 mb-2">
+                    <div class="flex flex-col shrink-0 mb-2">
                         <h2 class="text-[11px] lg:text-xs font-bold text-slate-400 mb-2 lg:mb-3 uppercase tracking-tighter">2. 養分物質</h2>
-                        <div id="matter-pool" class="flex flex-col space-y-2 lg:space-y-3 overflow-y-auto pb-4 overscroll-contain"></div>
+                        <div id="matter-pool" class="flex flex-col space-y-2 lg:space-y-3 pb-2"></div>
                     </div>
                     
                     <div class="flex flex-col flex-1 min-h-0 border-t border-slate-100 pt-3">
@@ -203,13 +203,7 @@
                     </marker>
                 </defs>
             </svg>
-            <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20 select-none text-center">
-                <p class="text-base lg:text-lg font-medium tracking-widest text-slate-400">
-                    點選器官連線。將物質卡拖曳進右下角儲存槽。<br>
-                    若發生激素拮抗，系統將自動替換調控模式。
-                </p>
             </div>
-        </div>
     </main>
 
     <div id="feedback-modal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
@@ -528,9 +522,20 @@
                     };
                     
                     if (!validSlotMap[oData.name].includes(data.name)) {
-                        alert(`【吸收排斥】\n器官「${oData.name}」無法儲存或處理「${data.name}」喔！`);
-                        card.remove(); 
-                        delete cardDataMap[card.id];
+                        // 物理彈開並消失動畫 (替代警告視窗)
+                        let fallX = data.x + (Math.random() > 0.5 ? 60 : -60);
+                        let fallY = data.y + 80;
+                        card.style.transition = 'translate 0.4s ease-in, opacity 0.4s ease-out, rotate 0.4s ease-in';
+                        card.style.translate = `${fallX}px ${fallY}px`;
+                        card.style.opacity = '0';
+                        card.style.rotate = `${Math.random() > 0.5 ? 20 : -20}deg`;
+                        card.style.pointerEvents = 'none';
+                        
+                        setTimeout(() => {
+                            if(card.parentNode) card.remove(); 
+                            delete cardDataMap[card.id];
+                        }, 400);
+                        
                         reactionTriggered = true; 
                         return;
                     }
