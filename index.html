@@ -60,13 +60,14 @@
             z-index: 48;
         }
 
-        /* 器官字卡縮小 95%，文字放大 105% */
+        /* 器官字卡縮小至 95% (寬 126px, 高 63px)，文字放大 105% (17.5px) */
+        /* 改用獨立的 translate 屬性，避免與動畫 scale 衝突 */
         .organ-card {
             position: absolute !important;
-            width: 133px; height: 66.5px;
+            width: 126px; height: 63px;
             z-index: 30;
-            transform: translate3d(var(--x, 0px), var(--y, 0px), 0);
-            font-size: 16.8px !important;
+            translate: var(--x, 0px) var(--y, 0px);
+            font-size: 17.5px !important;
             touch-action: none;
         }
         
@@ -89,7 +90,7 @@
             z-index: 50;
             cursor: grab;
             transition: width 0.2s, font-size 0.2s;
-            transform: translate3d(var(--x, 0px), var(--y, 0px), 0);
+            translate: var(--x, 0px) var(--y, 0px);
             font-size: 14px !important;
             touch-action: none;
         }
@@ -106,15 +107,16 @@
         }
         .line-wipe { animation: wipe-flow 1.5s infinite linear; }
 
+        /* 屬性解耦：只操作獨立的 scale 屬性，不干擾 translate */
         @keyframes physiological-grow {
-            0% { transform: translate3d(var(--x), var(--y), 0) scale(1); box-shadow: 0 0 0px rgba(16,185,129,0); }
-            95% { transform: translate3d(var(--x), var(--y), 0) scale(1.25); box-shadow: 0 0 15px rgba(16,185,129,0.7); }
-            100% { transform: translate3d(var(--x), var(--y), 0) scale(1); box-shadow: 0 0 0px rgba(16,185,129,0); }
+            0% { scale: 1; box-shadow: 0 0 0px rgba(16,185,129,0); }
+            95% { scale: 1.25; box-shadow: 0 0 15px rgba(16,185,129,0.7); }
+            100% { scale: 1; box-shadow: 0 0 0px rgba(16,185,129,0); }
         }
         @keyframes physiological-shrink {
-            0% { transform: translate3d(var(--x), var(--y), 0) scale(1); }
-            95% { transform: translate3d(var(--x), var(--y), 0) scale(0.65); }
-            100% { transform: translate3d(var(--x), var(--y), 0) scale(1); }
+            0% { scale: 1; }
+            95% { scale: 0.65; }
+            100% { scale: 1; }
         }
         
         .matter-grow { animation: physiological-grow 1.5s infinite linear; z-index: 60 !important; }
@@ -249,6 +251,9 @@
             ]
         };
 
+        const ORG_W = 126;
+        const ORG_H = 63;
+
         let connections = []; 
         let cardDataMap = {}; 
         let selectedCardId = null;
@@ -374,17 +379,20 @@
                     halo.style.top = `${data.y + 16}px`;
                 }
 
-                if (data.type === 'organ' && data.attachedMatterId) {
-                    const matterEl = document.getElementById(data.attachedMatterId);
-                    const matterData = cardDataMap[data.attachedMatterId];
-                    if (matterEl && matterData) {
-                        const mWidth = matterEl.offsetWidth || 75;
-                        // 更新吸附座標系：相容於縮小後的器官尺寸 133x66.5
-                        matterData.x = data.x + (133 - mWidth + 8); 
-                        matterData.y = data.y + (66.5 - 32 + 8);  
-                        matterEl.style.setProperty('--x', `${matterData.x}px`);
-                        matterEl.style.setProperty('--y', `${matterData.y}px`);
-                    }
+                if (data.type === 'organ') {
+                    Object.keys(cardDataMap).forEach(key => {
+                        const mData = cardDataMap[key];
+                        if (mData.type === 'matter' && mData.parentSlotOrganId === card.id) {
+                            const mEl = document.getElementById(key);
+                            if (mEl) {
+                                const mWidth = mEl.offsetWidth || 75;
+                                mData.x = data.x + (ORG_W - mWidth + 8); 
+                                mData.y = data.y + (ORG_H - 32 + 8);  
+                                mEl.style.setProperty('--x', `${mData.x}px`);
+                                mEl.style.setProperty('--y', `${mData.y}px`);
+                            }
+                        }
+                    });
                 }
                 updateAllLines();
             }
@@ -434,9 +442,8 @@
             oData.respirationDone = true;
 
             const canvas = document.getElementById('canvas');
-            // 更新呼吸動畫發射中心點：相容縮小尺寸 133x66.5
-            const startX = oData.x + 66.5;
-            const startY = oData.y + 33.25;
+            const startX = oData.x + (ORG_W / 2);
+            const startY = oData.y + (ORG_H / 2);
 
             const products = [
                 { name: "水", color: "#93c5fd", initDx: -80, initDy: -30, dx: -100, dy: -90 },
@@ -473,9 +480,8 @@
                         if (exName === "葡萄糖") {
                             const centerX = data.x + 37.5;
                             const centerY = data.y + 16;
-                            // 更新粒線體判定範圍：相容縮小尺寸 133x66.5
-                            if (centerX >= oData.x && centerX <= oData.x + 133 &&
-                                centerY >= oData.y && centerY <= oData.y + 66.5) {
+                            if (centerX >= oData.x && centerX <= oData.x + ORG_W &&
+                                centerY >= oData.y && centerY <= oData.y + ORG_H) {
                                 
                                 const exCard = document.getElementById(oData.attachedMatterId);
                                 if(exCard) exCard.remove();
@@ -511,6 +517,24 @@
                 if (dist < 45) {
                     if (oData.attachedMatterId) return; 
                     
+                    const validSlotMap = {
+                        "口腔": ["澱粉"],
+                        "小腸": ["澱粉", "葡萄糖"],
+                        "血管": ["葡萄糖"],
+                        "肝臟": ["肝糖"],
+                        "肌肉組織": ["肝糖"],
+                        "脂肪組織": ["脂肪"],
+                        "細胞粒線體": ["葡萄糖"]
+                    };
+                    
+                    if (!validSlotMap[oData.name].includes(data.name)) {
+                        alert(`【吸收排斥】\n器官「${oData.name}」無法儲存或處理「${data.name}」喔！`);
+                        card.remove(); 
+                        delete cardDataMap[card.id];
+                        reactionTriggered = true; 
+                        return;
+                    }
+
                     oData.attachedMatterId = card.id;
                     data.parentSlotOrganId = organEl.id;
                     
@@ -522,9 +546,8 @@
 
                     setTimeout(() => {
                         const mWidth = card.offsetWidth || 75;
-                        // 更新吸附座標系：相容於縮小後的器官尺寸 133x66.5
-                        data.x = oData.x + (133 - mWidth + 8);
-                        data.y = oData.y + (66.5 - 32 + 8);
+                        data.x = oData.x + (ORG_W - mWidth + 8);
+                        data.y = oData.y + (ORG_H - 32 + 8);
                         card.style.setProperty('--x', `${data.x}px`);
                         card.style.setProperty('--y', `${data.y}px`);
                     }, 10);
@@ -629,9 +652,8 @@
                 const f = cardDataMap[conn.fromId]; const t = cardDataMap[conn.toId];
                 if (!f || !t) return;
 
-                // 更新連線與箭頭計算的中心點：相容縮小尺寸 133x66.5
-                const x1 = f.x + 66.5, y1 = f.y + 33.25;
-                const x2 = t.x + 66.5, y2 = t.y + 33.25;
+                const x1 = f.x + (ORG_W / 2), y1 = f.y + (ORG_H / 2);
+                const x2 = t.x + (ORG_W / 2), y2 = t.y + (ORG_H / 2);
                 const dx = x2 - x1, dy = y2 - y1;
                 const dist = Math.hypot(dx, dy) || 1;
                 const offset = 14; 
@@ -757,7 +779,7 @@
             if (correctCount >= 5 && !connections.some(c => c.status === 'red')) {
                 document.getElementById('feedback-modal').classList.remove('hidden');
             } else {
-                alert("檢查完成！紅色箭頭代表方向、物質配對有誤，或缺乏必要的激素調控。\n提示：若肝臟與血管雙向都已連線，只要其中一個方向有激素正在作用，另一個方向就會被視為合法的「抑制狀態」喔！");
+                alert("⚠️ 發現錯誤或遺漏！請檢查以下幾點：\n\n1. 是否有放上對應的「激素」？\n2. 連線的「箭頭方向」對不對？\n3. 是否有「漏連」的重要路徑？\n\n（提示：拮抗作用下，反向的箭頭不放激素也會自動視為抑制狀態）");
             }
         }
 
