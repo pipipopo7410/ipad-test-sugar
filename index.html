@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
+    <title>🎯 血糖調節：系統動態建構</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* ==========================================
+           全域導覽列
+           ========================================== */
+        #nav-tabs-bar {
+            display: flex;
+            background: #2E7D32;
+            padding: 0 15px;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            height: 44px;
+            box-sizing: border-box;
+            z-index: 999;
+            width: 100%;
+            flex-shrink: 0;
+        }
+        .nav-tab-btn {
+            padding: 6px 14px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+        .nav-tab-btn.active {
+            background: white;
+            color: #2E7D32;
+        }
+
+        /* 橫向防呆機制 */
+        #orientation-warning { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh; background: #0f172a; color: white; z-index: 9999; flex-direction: column; justify-content: center; align-items: center; font-size: 1.5em; text-align: center; padding: 20px; box-sizing: border-box; }
+        @media (orientation: portrait) { #orientation-warning { display: flex; } }
+
+        /* ==========================================
+           畫布與連線卡片核心設定
+           ========================================== */
+        /* 移除全域 touch-action: none，改由 JS 針對特定區域阻擋，保留側邊欄滾動能力 */
+        body, html { overflow: hidden; -webkit-user-select: none; user-select: none; }
+        #canvas { touch-action: none; }
+        
+        .canvas-bg { background-image: radial-gradient(#e2e8f0 1.5px, transparent 1.5px); background-size: 24px 24px; }
+        
+        #svg-layer { z-index: 45; }
+        
+        .hormone-halo {
+            position: absolute;
+            pointer-events: none;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+            z-index: 48;
+        }
+
+        .organ-card {
+            position: absolute !important;
+            width: 140px; height: 70px;
+            z-index: 30;
+            transform: translate3d(var(--x, 0px), var(--y, 0px), 0);
+            font-size: 16px !important;
+            touch-action: none; /* 拖曳物件禁止觸發預設滑動 */
+        }
+        
+        .matter-slot {
+            position: absolute;
+            right: -8px; bottom: -8px;
+            width: 75px; height: 32px;
+            background: rgba(255,255,255,0.9);
+            border: 2px dashed #cbd5e1;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; color: #94a3b8;
+            pointer-events: none;
+            z-index: 31;
+        }
+        
+        .matter-card-canvas, .hormone-card-canvas {
+            position: absolute !important;
+            width: 75px; height: 32px;
+            z-index: 50;
+            cursor: grab;
+            transition: width 0.2s, font-size 0.2s;
+            transform: translate3d(var(--x, 0px), var(--y, 0px), 0);
+            font-size: 14px !important;
+            touch-action: none; /* 拖曳物件禁止觸發預設滑動 */
+        }
+        
+        .card-active { z-index: 100 !important; box-shadow: 0 15px 30px rgba(0,0,0,0.3); }
+        .card-selected { outline: 3px solid #3b82f6; outline-offset: 4px; }
+
+        /* 動畫系統 */
+        @keyframes wipe-flow {
+            0% { stroke-dashoffset: var(--dist); opacity: 1; }
+            70% { stroke-dashoffset: 0; opacity: 1; }
+            90% { stroke-dashoffset: 0; opacity: 0; }
+            100% { stroke-dashoffset: var(--dist); opacity: 0; }
+        }
+        .line-wipe { animation: wipe-flow 1.5s infinite linear; }
+
+        @keyframes physiological-grow {
+            0% { transform: translate3d(var(--x), var(--y), 0) scale(1); box-shadow: 0 0 0px rgba(16,185,129,0); }
+            95% { transform: translate3d(var(--x), var(--y), 0) scale(1.25); box-shadow: 0 0 15px rgba(16,185,129,0.7); }
+            100% { transform: translate3d(var(--x), var(--y), 0) scale(1); box-shadow: 0 0 0px rgba(16,185,129,0); }
+        }
+        @keyframes physiological-shrink {
+            0% { transform: translate3d(var(--x), var(--y), 0) scale(1); }
+            95% { transform: translate3d(var(--x), var(--y), 0) scale(0.65); }
+            100% { transform: translate3d(var(--x), var(--y), 0) scale(1); }
+        }
+        
+        .matter-grow { animation: physiological-grow 1.5s infinite linear; z-index: 60 !important; }
+        .matter-shrink { animation: physiological-shrink 1.5s infinite linear; z-index: 60 !important; }
+
+        .product-particle {
+            position: absolute;
+            width: 70px; height: 26px;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid #020617;
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: bold;
+            pointer-events: none;
+            z-index: 80;
+            animation: float-away 2.5s ease-out forwards;
+        }
+        @keyframes float-away {
+            0% { transform: translate(0, 0) scale(0.6); opacity: 1; }
+            20% { transform: translate(calc(var(--dx) * 0.2), calc(var(--dy) * 0.2)) scale(1.1); opacity: 1; }
+            80% { transform: translate(calc(var(--dx) * 0.8), calc(var(--dy) * 0.8)) scale(1); opacity: 0.9; }
+            100% { transform: translate(var(--dx), var(--dy)) scale(0.9); opacity: 0; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 h-[100dvh] w-screen overflow-hidden flex flex-col font-sans select-none overscroll-none text-slate-800">
+
+    <div id="orientation-warning" class="font-sans tracking-wider">
+        🔄<br><br>請將裝置旋轉為<b class="text-rose-400 mx-1">橫向模式</b>以進行課程互動。
+    </div>
+
+    <div id="nav-tabs-bar">
+        <button class="nav-tab-btn">酵素</button>
+        <button class="nav-tab-btn">光合作用</button>
+        <button class="nav-tab-btn">循環</button>
+        <button class="nav-tab-btn">神經</button>
+        <button class="nav-tab-btn active">血糖</button>
+        <button class="nav-tab-btn">排氨</button>
+    </div>
+
+    <header class="flex-none h-[56px] px-6 bg-white border-b border-slate-200 shadow-sm flex justify-between items-center z-10">
+        <h1 class="text-xl font-bold text-slate-800">🎯 血糖調節：系統動態建構</h1>
+        <div class="flex space-x-3">
+            <button onclick="checkAnswers()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-medium px-5 py-1.5 rounded-lg shadow-sm transition text-sm">檢查架構</button>
+            <button onclick="resetCanvas()" class="border border-slate-300 hover:bg-slate-50 text-slate-600 font-medium px-4 py-1.5 rounded-lg transition text-sm">重設畫布</button>
+        </div>
+    </header>
+
+    <main class="flex flex-1 flex-row w-full max-w-[1600px] mx-auto min-h-0 relative">
+        
+        <div id="sidebar" class="w-[320px] lg:w-[420px] bg-white border-r border-slate-200 p-3 lg:p-4 flex flex-col shrink-0 z-10 shadow-sm min-h-0">
+            <div class="grid grid-cols-3 gap-2 lg:gap-3 h-full overflow-hidden">
+                <div class="flex flex-col h-full border-r border-slate-100 pr-1">
+                    <h2 class="text-[11px] lg:text-xs font-bold text-slate-400 mb-2 lg:mb-3 uppercase tracking-tighter">1. 器官構造</h2>
+                    <div id="organ-pool" class="flex flex-col space-y-2 lg:space-y-3 overflow-y-auto pb-10 overscroll-contain"></div>
+                </div>
+                <div class="flex flex-col h-full border-r border-slate-100 px-1">
+                    <h2 class="text-[11px] lg:text-xs font-bold text-slate-400 mb-2 lg:mb-3 uppercase tracking-tighter">2. 養分物質</h2>
+                    <div id="matter-pool" class="flex flex-col space-y-2 lg:space-y-3 overflow-y-auto pb-10 overscroll-contain"></div>
+                </div>
+                <div class="flex flex-col h-full pl-1">
+                    <h2 class="text-[11px] lg:text-xs font-bold text-slate-400 mb-2 lg:mb-3 uppercase tracking-tighter">3. 內分泌激素</h2>
+                    <div id="hormone-pool" class="flex flex-col space-y-2 lg:space-y-3 overflow-y-auto pb-10 overscroll-contain"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="canvas" class="flex-1 relative overflow-hidden canvas-bg bg-slate-50">
+            <div id="drag-halo" class="hormone-halo"></div>
+            <svg id="svg-layer" class="absolute inset-0 pointer-events-none w-full h-full">
+                <defs>
+                    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+                    </marker>
+                    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444"/>
+                    </marker>
+                    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981"/>
+                    </marker>
+                </defs>
+            </svg>
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20 select-none text-center">
+                <p class="text-base lg:text-lg font-medium tracking-widest text-slate-400">
+                    點選器官連線。將物質卡拖曳進右下角儲存槽。<br>
+                    若發生激素拮抗，系統將自動替換調控模式。
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <div id="feedback-modal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-xl border border-slate-100">
+            <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">✓</div>
+            <h3 class="text-xl font-bold mb-2 text-slate-800">血糖調節系統建構成功！</h3>
+            <p id="feedback-text" class="text-slate-500 text-sm mb-6">你精確掌握了器官儲存、物質轉化、拮抗作用以及細胞呼吸的動態機制！</p>
+            <button onclick="closeFeedback()" class="w-full bg-slate-800 text-white font-medium py-2 rounded-xl hover:bg-slate-900 transition">關閉挑戰</button>
+        </div>
+    </div>
+
+    <script>
+        // 防止畫布在平板上拖曳時觸發網頁捲動，但放行側邊欄的滾動
+        document.addEventListener('touchmove', function(e) {
+            if (!e.target.closest('.overscroll-contain')) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        const unitData = {
+            organs: [
+                { name: "口腔", bg: "bg-pink-50 border-pink-200 text-pink-900", hasSlot: true },
+                { name: "小腸", bg: "bg-orange-100 border-orange-300 text-orange-900", hasSlot: true },
+                { name: "血管", bg: "bg-red-50 border-red-200 text-red-900 font-black", hasSlot: true }, 
+                { name: "肝臟", bg: "bg-rose-100 border-rose-300 text-rose-900 font-extrabold", hasSlot: true }, 
+                { name: "肌肉組織", bg: "bg-purple-100 border-purple-300 text-purple-900", hasSlot: true },
+                { name: "脂肪組織", bg: "bg-yellow-100 border-yellow-300 text-yellow-900", hasSlot: true },
+                { name: "細胞粒線體", bg: "bg-emerald-100 border-emerald-300 text-emerald-900", hasSlot: true }
+            ],
+            matters: [
+                { name: "澱粉", textColor: "#fcd34d", bg: "bg-slate-900" }, 
+                { name: "葡萄糖", textColor: "#fdba74", bg: "bg-slate-900" }, 
+                { name: "肝糖", textColor: "#fca5a5", bg: "bg-slate-900" }, 
+                { name: "脂肪", textColor: "#fef08a", bg: "bg-slate-900" }, 
+                { name: "氧氣", textColor: "#67e8f9", bg: "bg-slate-900" } 
+            ],
+            hormones: [
+                { name: "胰島素", themeColor: "#ffffff", bg: "bg-blue-600 border-blue-800" }, 
+                { name: "升糖素", themeColor: "#ffffff", bg: "bg-red-600 border-red-800" }
+            ]
+        };
+
+        let connections = []; 
+        let cardDataMap = {}; 
+        let selectedCardId = null;
+        let globalCounter = 0;
+
+        function initGame() {
+            const pools = { organ: 'organ-pool', matter: 'matter-pool', hormone: 'hormone-pool' };
+            Object.values(pools).forEach(id => document.getElementById(id).innerHTML = '');
+            connections = []; cardDataMap = {}; selectedCardId = null;
+            document.getElementById('svg-layer').innerHTML = document.getElementById('svg-layer').querySelector('defs').outerHTML;
+
+            unitData.organs.forEach(o => createPoolCard(o, 'organ', pools.organ));
+            unitData.matters.forEach(m => createPoolCard(m, 'matter', pools.matter));
+            unitData.hormones.forEach(h => createPoolCard(h, 'hormone', pools.hormone));
+        }
+
+        function createPoolCard(obj, type, poolId) {
+            globalCounter++;
+            const id = `card-${type}-${globalCounter}`;
+            const card = document.createElement('div');
+            card.id = id; card.dataset.name = obj.name; card.dataset.type = type;
+            const fontSizeClass = (type === 'organ') ? 'text-sm lg:text-base tracking-wide' : 'text-xs lg:text-sm';
+            card.className = `${obj.bg} border rounded-lg shadow-sm ${fontSizeClass} font-bold flex items-center justify-center h-10 w-full shrink-0 cursor-grab`;
+            if (obj.textColor || obj.themeColor) card.style.color = obj.textColor || obj.themeColor;
+            card.innerText = obj.name;
+            
+            card.addEventListener('mousedown', startDrag);
+            card.addEventListener('touchstart', startDrag, {passive:false});
+            if(type === 'organ') card.addEventListener('click', handleOrganClick);
+            
+            document.getElementById(poolId).appendChild(card);
+            cardDataMap[id] = { 
+                inCanvas: false, type, hasSlot: obj.hasSlot, name: obj.name, 
+                attachedMatterId: null, parentSlotOrganId: null, themeColor: obj.themeColor || obj.textColor,
+                respirationDone: false 
+            };
+        }
+
+        function startDrag(e) {
+            e.stopPropagation();
+            let originalCard = e.currentTarget;
+            let data = cardDataMap[originalCard.id];
+            
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            const origRect = originalCard.getBoundingClientRect();
+            let offX = clientX - origRect.left;
+            let offY = clientY - origRect.top;
+
+            const canvas = document.getElementById('canvas');
+            const canvasRect = canvas.getBoundingClientRect();
+            const halo = document.getElementById('drag-halo');
+            let card = originalCard;
+            
+            if ((data.type === 'matter' || data.type === 'hormone') && !data.inCanvas) {
+                globalCounter++;
+                const cloneId = `clone-${globalCounter}`;
+                const clone = originalCard.cloneNode(true);
+                clone.id = cloneId;
+                clone.classList.remove('w-full', 'h-10');
+                clone.classList.add(data.type === 'matter' ? 'matter-card-canvas' : 'hormone-card-canvas');
+                canvas.appendChild(clone);
+                
+                offX = 37.5; 
+                offY = 16;   
+                
+                data.x = clientX - canvasRect.left - offX;
+                data.y = clientY - canvasRect.top - offY;
+                cardDataMap[cloneId] = { ...data, inCanvas: true, x: data.x, y: data.y, attachedMatterId: null, parentSlotOrganId: null };
+                card = clone; data = cardDataMap[cloneId];
+                
+                card.style.setProperty('--x', `${data.x}px`);
+                card.style.setProperty('--y', `${data.y}px`);
+
+                card.addEventListener('mousedown', startDrag);
+                card.addEventListener('touchstart', startDrag, {passive:false});
+            }
+
+            card.classList.add('card-active');
+
+            if (data.type === 'matter' && data.parentSlotOrganId) {
+                const oldOrgan = cardDataMap[data.parentSlotOrganId];
+                if (oldOrgan) oldOrgan.attachedMatterId = null;
+                data.parentSlotOrganId = null;
+                if (data.name === "葡萄糖" || data.name === "澱粉") { 
+                    card.innerText = data.name; 
+                    card.style.width = "75px"; 
+                }
+            }
+
+            if (data.type === 'hormone') {
+                connections.forEach(conn => { if (conn.attachedHormoneId === card.id) conn.attachedHormoneId = null; });
+                halo.style.display = 'block';
+                halo.style.width = '100px';
+                halo.style.height = '100px';
+                halo.style.background = data.name === '胰島素' ? 'rgba(59, 130, 246, 0.4)' : 'rgba(239, 68, 68, 0.4)';
+                halo.style.left = `${data.x + 37.5}px`;
+                halo.style.top = `${data.y + 16}px`;
+            }
+
+            function doDrag(ev) {
+                const mX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+                const mY = ev.touches ? ev.touches[0].clientY : ev.clientY;
+                
+                if (data.type === 'organ' && !data.inCanvas) {
+                    data.inCanvas = true; card.classList.remove('w-full', 'h-10'); card.classList.add('organ-card');
+                    if (data.hasSlot) {
+                        const slot = document.createElement('div');
+                        slot.className = 'matter-slot'; slot.innerText = '儲存槽';
+                        card.appendChild(slot);
+                    }
+                    canvas.appendChild(card);
+                }
+
+                data.x = mX - canvasRect.left - offX;
+                data.y = mY - canvasRect.top - offY;
+                card.style.setProperty('--x', `${data.x}px`);
+                card.style.setProperty('--y', `${data.y}px`);
+
+                if (data.type === 'hormone') {
+                    halo.style.left = `${data.x + 37.5}px`;
+                    halo.style.top = `${data.y + 16}px`;
+                }
+
+                if (data.type === 'organ' && data.attachedMatterId) {
+                    const matterEl = document.getElementById(data.attachedMatterId);
+                    const matterData = cardDataMap[data.attachedMatterId];
+                    if (matterEl && matterData) {
+                        const mWidth = matterEl.offsetWidth || 75;
+                        matterData.x = data.x + (140 - mWidth + 8); 
+                        matterData.y = data.y + (70 - 32 + 8);  
+                        matterEl.style.setProperty('--x', `${matterData.x}px`);
+                        matterEl.style.setProperty('--y', `${matterData.y}px`);
+                    }
+                }
+                updateAllLines();
+            }
+
+            function stopDrag(ev) {
+                card.classList.remove('card-active');
+                if (data.type === 'hormone') halo.style.display = 'none';
+
+                const releaseX = ev.changedTouches ? ev.changedTouches[0].clientX : ev.clientX;
+                const sidebarRight = document.getElementById('sidebar').getBoundingClientRect().right;
+                
+                if (data.inCanvas && releaseX < sidebarRight) {
+                    if(data.type !== 'organ') { card.remove(); delete cardDataMap[card.id]; }
+                } else {
+                    let reactionTriggered = false;
+                    if (data.type === 'matter') {
+                        reactionTriggered = checkMatterSnap(card, data);
+                    }
+                    if (data.type === 'hormone') {
+                        checkHormoneSnap(card, data);
+                    }
+                    
+                    if (reactionTriggered) {
+                        document.removeEventListener('mousemove', doDrag);
+                        document.removeEventListener('mouseup', stopDrag);
+                        document.removeEventListener('touchmove', doDrag);
+                        document.removeEventListener('touchend', stopDrag);
+                        return;
+                    }
+                }
+
+                document.removeEventListener('mousemove', doDrag);
+                document.removeEventListener('mouseup', stopDrag);
+                document.removeEventListener('touchmove', doDrag);
+                document.removeEventListener('touchend', stopDrag);
+                updateAllLines();
+            }
+
+            document.addEventListener('mousemove', doDrag);
+            document.addEventListener('mouseup', stopDrag);
+            document.addEventListener('touchmove', doDrag, {passive:false});
+            document.addEventListener('touchend', stopDrag);
+        }
+
+        function triggerRespirationAnimation(organEl) {
+            const oData = cardDataMap[organEl.id];
+            oData.respirationDone = true;
+
+            const canvas = document.getElementById('canvas');
+            const startX = oData.x + 70;
+            const startY = oData.y + 35;
+
+            const products = [
+                { name: "水", color: "#93c5fd", initDx: -80, initDy: -30, dx: -100, dy: -90 },
+                { name: "二氧化碳", color: "#d1d5db", initDx: 0, initDy: -50, dx: 0, dy: -120 },
+                { name: "能量(ATP)", color: "#fcd34d", initDx: 80, initDy: -30, dx: 100, dy: -90 }
+            ];
+
+            products.forEach(p => {
+                const el = document.createElement('div');
+                el.className = 'product-particle';
+                el.style.color = p.color;
+                el.innerText = p.name;
+                el.style.left = `${startX - 35 + p.initDx}px`; 
+                el.style.top = `${startY - 13 + p.initDy}px`;  
+                el.style.setProperty('--dx', `${p.dx}px`);
+                el.style.setProperty('--dy', `${p.dy}px`);
+                canvas.appendChild(el);
+
+                setTimeout(() => {
+                    if (el.parentNode) el.remove();
+                }, 2500);
+            });
+        }
+
+        function checkMatterSnap(card, data) {
+            let reactionTriggered = false;
+
+            if (data.name === "氧氣") {
+                let hitMitochondria = false;
+                document.querySelectorAll('.organ-card').forEach(organEl => {
+                    const oData = cardDataMap[organEl.id];
+                    if (oData.name === "細胞粒線體" && oData.attachedMatterId) {
+                        const exName = cardDataMap[oData.attachedMatterId].name;
+                        if (exName === "葡萄糖") {
+                            const centerX = data.x + 37.5;
+                            const centerY = data.y + 16;
+                            if (centerX >= oData.x && centerX <= oData.x + 140 &&
+                                centerY >= oData.y && centerY <= oData.y + 70) {
+                                
+                                const exCard = document.getElementById(oData.attachedMatterId);
+                                if(exCard) exCard.remove();
+                                delete cardDataMap[oData.attachedMatterId];
+                                oData.attachedMatterId = null;
+
+                                card.remove();
+                                delete cardDataMap[card.id];
+
+                                triggerRespirationAnimation(organEl);
+                                reactionTriggered = true;
+                                hitMitochondria = true;
+                            }
+                        }
+                    }
+                });
+                if (hitMitochondria) return true;
+            }
+
+            document.querySelectorAll('.organ-card').forEach(organEl => {
+                if (reactionTriggered) return;
+                const oData = cardDataMap[organEl.id];
+                if (!oData.hasSlot) return;
+                
+                const slotEl = organEl.querySelector('.matter-slot');
+                const slotRect = slotEl.getBoundingClientRect();
+                const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+                
+                const sCenterX = slotRect.left - canvasRect.left + 37;
+                const sCenterY = slotRect.top - canvasRect.top + 16;
+                const dist = Math.hypot(data.x + 37 - sCenterX, data.y + 16 - sCenterY);
+                
+                if (dist < 45) {
+                    if (oData.attachedMatterId) return; 
+                    
+                    oData.attachedMatterId = card.id;
+                    data.parentSlotOrganId = organEl.id;
+                    
+                    if (oData.name === "血管" && data.name === "葡萄糖") {
+                        card.innerText = "葡萄糖 (血糖)"; card.style.width = "105px";
+                    } else if (oData.name === "小腸" && (data.name === "澱粉" || data.name === "葡萄糖")) {
+                        card.innerText = "澱粉/葡萄糖"; card.style.width = "105px";
+                    }
+
+                    setTimeout(() => {
+                        const mWidth = card.offsetWidth || 75;
+                        data.x = oData.x + (140 - mWidth + 8);
+                        data.y = oData.y + (70 - 32 + 8);
+                        card.style.setProperty('--x', `${data.x}px`);
+                        card.style.setProperty('--y', `${data.y}px`);
+                    }, 10);
+                }
+            });
+
+            return reactionTriggered;
+        }
+
+        function checkHormoneSnap(card, data) {
+            let closestConn = null; let minDistance = 50;
+            connections.forEach(conn => {
+                const dist = Math.hypot(data.x + 37.5 - conn.midX, data.y + 16 - conn.midY);
+                if (dist < minDistance) { minDistance = dist; closestConn = conn; }
+            });
+            
+            if (closestConn) {
+                const fData = cardDataMap[closestConn.fromId];
+                const tData = cardDataMap[closestConn.toId];
+                const fMat = fData.attachedMatterId ? cardDataMap[fData.attachedMatterId].name : "";
+                const tMat = tData.attachedMatterId ? cardDataMap[tData.attachedMatterId].name : "";
+                const hName = data.name;
+
+                let isCorrectPath = false;
+                let isCorrectMatter = false;
+                let errorMsg = "";
+
+                const inverseConn = connections.find(c => c.fromId === closestConn.toId && c.toId === closestConn.fromId);
+                if (inverseConn && inverseConn.attachedHormoneId) {
+                    const oldHName = cardDataMap[inverseConn.attachedHormoneId].name;
+                    if ((hName === "胰島素" && oldHName === "升糖素") || (hName === "升糖素" && oldHName === "胰島素")) {
+                        alert(`【拮抗作用觸發！】\n生物體內「${hName}」與「${oldHName}」的作用互為拮抗，無法同時發揮最大效應。系統已自動移除 ${oldHName}，切換為「${hName}」主導的調控模式！`);
+                        const oldCard = document.getElementById(inverseConn.attachedHormoneId);
+                        if (oldCard) oldCard.remove();
+                        delete cardDataMap[inverseConn.attachedHormoneId];
+                        inverseConn.attachedHormoneId = null;
+                    }
+                }
+
+                if (hName === "胰島素") {
+                    if (fData.name === "血管" && ["肝臟", "肌肉組織", "脂肪組織", "細胞粒線體"].includes(tData.name)) {
+                        isCorrectPath = true;
+                        if (fMat === "葡萄糖") {
+                            if (["肝臟", "肌肉組織"].includes(tData.name) && tMat === "肝糖") isCorrectMatter = true;
+                            else if (tData.name === "脂肪組織" && tMat === "脂肪") isCorrectMatter = true;
+                            else if (tData.name === "細胞粒線體" && (tMat === "葡萄糖" || tData.respirationDone)) isCorrectMatter = true;
+                        }
+                        if (!isCorrectMatter) errorMsg = "【缺乏反應物質】\n胰島素要發揮作用，血管內必須有「葡萄糖」，且目標器官必須放置對應的產物卡片（如肝臟需肝糖）！";
+                    } else {
+                        errorMsg = "【路徑錯誤】\n胰島素只能促進血管內的血糖進入肝臟、肌肉、脂肪或細胞粒線體。";
+                    }
+                } else if (hName === "升糖素") {
+                    if (fData.name === "肝臟" && tData.name === "血管") {
+                        isCorrectPath = true;
+                        if (fMat === "肝糖" && tMat === "葡萄糖") isCorrectMatter = true;
+                        if (!isCorrectMatter) errorMsg = "【缺乏反應物質】\n升糖素要發揮作用，肝臟內必須有「肝糖」，且血管內必須放置「葡萄糖」作為產物！";
+                    } else {
+                        errorMsg = "【路徑錯誤】\n升糖素主要促進肝臟內的肝糖分解並釋放至血管中。";
+                    }
+                }
+
+                if (isCorrectPath && isCorrectMatter) {
+                    closestConn.attachedHormoneId = card.id;
+                    data.x = closestConn.midX - 37.5; data.y = closestConn.midY - 40; 
+                    card.style.setProperty('--x', `${data.x}px`);
+                    card.style.setProperty('--y', `${data.y}px`);
+                } else {
+                    alert(errorMsg);
+                    card.remove(); delete cardDataMap[card.id];
+                }
+            }
+        }
+
+        function handleOrganClick(e) {
+            e.stopPropagation(); const id = e.currentTarget.id;
+            if (!cardDataMap[id].inCanvas) return;
+            if (!selectedCardId) { selectedCardId = id; e.currentTarget.classList.add('card-selected'); }
+            else { if (selectedCardId !== id) toggleConnection(selectedCardId, id);
+                document.getElementById(selectedCardId).classList.remove('card-selected'); selectedCardId = null; }
+        }
+
+        function toggleConnection(from, to) {
+            const idx = connections.findIndex(c => c.fromId === from && c.toId === to);
+            if (idx > -1) {
+                const hId = connections[idx].attachedHormoneId;
+                if(hId) { const hc = document.getElementById(hId); if(hc) hc.remove(); delete cardDataMap[hId]; }
+                connections.splice(idx, 1);
+            } else {
+                connections.push({ fromId: from, toId: to, id: Date.now(), attachedHormoneId: null, status: 'gray', midX: 0, midY: 0 });
+            }
+            updateAllLines();
+        }
+
+        function updateAllLines() {
+            const svg = document.getElementById('svg-layer');
+            const defs = svg.querySelector('defs').outerHTML;
+            svg.innerHTML = defs;
+
+            document.querySelectorAll('.matter-card-canvas').forEach(el => el.classList.remove('matter-grow', 'matter-shrink'));
+
+            connections.forEach(conn => {
+                const f = cardDataMap[conn.fromId]; const t = cardDataMap[conn.toId];
+                if (!f || !t) return;
+
+                const x1 = f.x + 70, y1 = f.y + 35;
+                const x2 = t.x + 70, y2 = t.y + 35;
+                const dx = x2 - x1, dy = y2 - y1;
+                const dist = Math.hypot(dx, dy) || 1;
+                const offset = 14; 
+                const nx = -dy / dist * offset, ny = dx / dist * offset;
+
+                const cx1 = x1 + nx, cy1 = y1 + ny, cx2 = x2 + nx, cy2 = y2 + ny;
+                conn.midX = (cx1 + cx2) / 2; conn.midY = (cy1 + cy2) / 2;
+
+                let lx1 = cx1, ly1 = cy1, lx2 = cx2, ly2 = cy2;
+                const shrink = 55;
+                if (dist > shrink * 2) {
+                    lx1 = cx1 + (dx / dist) * shrink; ly1 = cy1 + (dy / dist) * shrink;
+                    lx2 = cx2 - (dx / dist) * shrink; ly2 = cy2 - (dy / dist) * shrink;
+                }
+                const visibleDist = Math.hypot(lx2 - lx1, ly2 - ly1);
+
+                const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                
+                const baseLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                baseLine.setAttribute('x1', lx1); baseLine.setAttribute('y1', ly1);
+                baseLine.setAttribute('x2', lx2); baseLine.setAttribute('y2', ly2);
+                let color = "#94a3b8";
+                if(conn.status === 'green') color = "#10b981";
+                if(conn.status === 'red') color = "#ef4444";
+                baseLine.setAttribute('stroke', color);
+                baseLine.setAttribute('stroke-width', '3.5');
+                baseLine.setAttribute('marker-end', `url(#arrow-${conn.status === 'green' ? 'green' : (conn.status === 'red' ? 'red' : 'gray')})`);
+                
+                if (conn.attachedHormoneId) {
+                    baseLine.setAttribute('opacity', '0.2');
+                }
+                group.appendChild(baseLine);
+
+                if (conn.attachedHormoneId) {
+                    const hData = cardDataMap[conn.attachedHormoneId];
+                    if (hData) {
+                        const hEl = document.getElementById(conn.attachedHormoneId);
+                        if (hEl) {
+                            hData.x = conn.midX - 37.5; hData.y = conn.midY - 40;
+                            hEl.style.setProperty('--x', `${hData.x}px`);
+                            hEl.style.setProperty('--y', `${hData.y}px`);
+                        }
+
+                        const hColor = hData.name === "胰島素" ? "#3b82f6" : "#ef4444";
+                        
+                        const wipeLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        wipeLine.setAttribute('x1', lx1); wipeLine.setAttribute('y1', ly1);
+                        wipeLine.setAttribute('x2', lx2); wipeLine.setAttribute('y2', ly2);
+                        wipeLine.setAttribute('stroke', hColor); 
+                        wipeLine.setAttribute('stroke-width', '5.5');
+                        wipeLine.setAttribute('stroke-linecap', 'round');
+                        wipeLine.style.setProperty('--dist', visibleDist);
+                        wipeLine.setAttribute('stroke-dasharray', visibleDist);
+                        wipeLine.setAttribute('class', 'line-wipe');
+                        group.appendChild(wipeLine);
+
+                        const fromMat = f.attachedMatterId; const toMat = t.attachedMatterId;
+                        if (hData.name === "胰島素" && f.name === "血管") {
+                            if(fromMat) document.getElementById(fromMat).classList.add('matter-shrink');
+                            if(toMat) document.getElementById(toMat).classList.add('matter-grow');
+                        }
+                        if (hData.name === "升糖素" && f.name === "肝臟" && t.name === "血管") {
+                            if(fromMat) document.getElementById(fromMat).classList.add('matter-shrink');
+                            if(toMat) document.getElementById(toMat).classList.add('matter-grow');
+                        }
+                    }
+                }
+                svg.appendChild(group);
+            });
+        }
+
+        function checkAnswers() {
+            const answers = [
+                { f: "口腔", t: "小腸", m: "澱粉", h: "" },
+                { f: "小腸", t: "血管", m: "葡萄糖", h: "" },
+                { f: "血管", t: "肝臟", m: "葡萄糖", h: "胰島素" },
+                { f: "肝臟", t: "血管", m: "葡萄糖", h: "升糖素" },
+                { f: "血管", t: "肌肉組織", m: "葡萄糖", h: "胰島素" },
+                { f: "血管", t: "脂肪組織", m: "葡萄糖", h: "胰島素" },
+                { f: "血管", t: "細胞粒線體", m: "葡萄糖", h: "胰島素" } 
+            ];
+            let correctCount = 0;
+            connections.forEach(conn => {
+                const fN = cardDataMap[conn.fromId].name, tN = cardDataMap[conn.toId].name;
+                const fD = cardDataMap[conn.fromId], tD = cardDataMap[conn.toId];
+                const fMN = fD.attachedMatterId ? cardDataMap[fD.attachedMatterId].name : "";
+                const tMN = tD.attachedMatterId ? cardDataMap[tD.attachedMatterId].name : "";
+                const hN = conn.attachedHormoneId ? cardDataMap[conn.attachedHormoneId].name : "";
+                
+                const hasM = (fN === "口腔" && fMN === "澱粉") || 
+                             (fN === "小腸" && (fMN === "澱粉" || fMN === "葡萄糖")) ||
+                             (tN === "血管" && tMN === "葡萄糖") ||
+                             (fN === "血管" && fMN === "葡萄糖") || 
+                             (tN === "肝臟" && tMN === "肝糖") ||
+                             (tN === "肌肉組織" && tMN === "肝糖") || 
+                             (tN === "脂肪組織" && tMN === "脂肪") ||
+                             (fN === "肝臟" && fMN === "肝糖") ||
+                             (tN === "細胞粒線體" && (tMN === "葡萄糖" || tD.respirationDone)); 
+
+                const perfectMatch = answers.some(a => a.f === fN && a.t === tN && a.h === hN);
+
+                let isMatch = false;
+
+                if (perfectMatch && hasM) {
+                    isMatch = true;
+                } else if (hasM && hN === "") {
+                    if ((fN === "血管" && tN === "肝臟") || (fN === "肝臟" && tN === "血管")) {
+                        const reverseConn = connections.find(c => c.fromId === conn.toId && c.toId === conn.fromId);
+                        if (reverseConn && reverseConn.attachedHormoneId) {
+                            isMatch = true;
+                        }
+                    }
+                }
+
+                if (isMatch) {
+                    conn.status = 'green'; correctCount++;
+                } else {
+                    conn.status = 'red';
+                }
+            });
+            updateAllLines();
+            
+            if (correctCount >= 5 && !connections.some(c => c.status === 'red')) {
+                document.getElementById('feedback-modal').classList.remove('hidden');
+            } else {
+                alert("檢查完成！紅色箭頭代表方向、物質配對有誤，或缺乏必要的激素調控。\n提示：若肝臟與血管雙向都已連線，只要其中一個方向有激素正在作用，另一個方向就會被視為合法的「抑制狀態」喔！");
+            }
+        }
+
+        function resetCanvas() { if(confirm("重設所有進度？")) location.reload(); }
+        function closeFeedback() { document.getElementById('feedback-modal').classList.add('hidden'); }
+        window.onload = initGame;
+    </script>
+</body>
+</html>
