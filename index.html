@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
-    <title>🎯 血糖調節：系統動態建構</title>
+    <title>🎯 血糖調節：概念圖練習</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* ==========================================
@@ -44,7 +44,6 @@
         /* ==========================================
            畫布與連線卡片核心設定
            ========================================== */
-        /* 移除全域 touch-action: none，改由 JS 針對特定區域阻擋，保留側邊欄滾動能力 */
         body, html { overflow: hidden; -webkit-user-select: none; user-select: none; }
         #canvas { touch-action: none; }
         
@@ -61,13 +60,14 @@
             z-index: 48;
         }
 
+        /* 器官字卡縮小 95%，文字放大 105% */
         .organ-card {
             position: absolute !important;
-            width: 140px; height: 70px;
+            width: 133px; height: 66.5px;
             z-index: 30;
             transform: translate3d(var(--x, 0px), var(--y, 0px), 0);
-            font-size: 16px !important;
-            touch-action: none; /* 拖曳物件禁止觸發預設滑動 */
+            font-size: 16.8px !important;
+            touch-action: none;
         }
         
         .matter-slot {
@@ -91,7 +91,7 @@
             transition: width 0.2s, font-size 0.2s;
             transform: translate3d(var(--x, 0px), var(--y, 0px), 0);
             font-size: 14px !important;
-            touch-action: none; /* 拖曳物件禁止觸發預設滑動 */
+            touch-action: none;
         }
         
         .card-active { z-index: 100 !important; box-shadow: 0 15px 30px rgba(0,0,0,0.3); }
@@ -156,7 +156,7 @@
     </div>
 
     <header class="flex-none h-[56px] px-6 bg-white border-b border-slate-200 shadow-sm flex justify-between items-center z-10">
-        <h1 class="text-xl font-bold text-slate-800">🎯 血糖調節：系統動態建構</h1>
+        <h1 class="text-xl font-bold text-slate-800">🎯 血糖調節：概念圖練習</h1>
         <div class="flex space-x-3">
             <button onclick="checkAnswers()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-medium px-5 py-1.5 rounded-lg shadow-sm transition text-sm">檢查架構</button>
             <button onclick="resetCanvas()" class="border border-slate-300 hover:bg-slate-50 text-slate-600 font-medium px-4 py-1.5 rounded-lg transition text-sm">重設畫布</button>
@@ -165,19 +165,23 @@
 
     <main class="flex flex-1 flex-row w-full max-w-[1600px] mx-auto min-h-0 relative">
         
-        <div id="sidebar" class="w-[320px] lg:w-[420px] bg-white border-r border-slate-200 p-3 lg:p-4 flex flex-col shrink-0 z-10 shadow-sm min-h-0">
-            <div class="grid grid-cols-3 gap-2 lg:gap-3 h-full overflow-hidden">
-                <div class="flex flex-col h-full border-r border-slate-100 pr-1">
+        <div id="sidebar" class="w-[260px] lg:w-[320px] bg-white border-r border-slate-200 p-3 lg:p-4 flex flex-col shrink-0 z-10 shadow-sm min-h-0">
+            <div class="grid grid-cols-2 gap-2 lg:gap-3 h-full overflow-hidden">
+                <div class="flex flex-col h-full border-r border-slate-100 pr-1 lg:pr-2">
                     <h2 class="text-[11px] lg:text-xs font-bold text-slate-400 mb-2 lg:mb-3 uppercase tracking-tighter">1. 器官構造</h2>
                     <div id="organ-pool" class="flex flex-col space-y-2 lg:space-y-3 overflow-y-auto pb-10 overscroll-contain"></div>
                 </div>
-                <div class="flex flex-col h-full border-r border-slate-100 px-1">
-                    <h2 class="text-[11px] lg:text-xs font-bold text-slate-400 mb-2 lg:mb-3 uppercase tracking-tighter">2. 養分物質</h2>
-                    <div id="matter-pool" class="flex flex-col space-y-2 lg:space-y-3 overflow-y-auto pb-10 overscroll-contain"></div>
-                </div>
-                <div class="flex flex-col h-full pl-1">
-                    <h2 class="text-[11px] lg:text-xs font-bold text-slate-400 mb-2 lg:mb-3 uppercase tracking-tighter">3. 內分泌激素</h2>
-                    <div id="hormone-pool" class="flex flex-col space-y-2 lg:space-y-3 overflow-y-auto pb-10 overscroll-contain"></div>
+                
+                <div class="flex flex-col h-full pl-1 lg:pl-2">
+                    <div class="flex flex-col flex-1 min-h-0 mb-2">
+                        <h2 class="text-[11px] lg:text-xs font-bold text-slate-400 mb-2 lg:mb-3 uppercase tracking-tighter">2. 養分物質</h2>
+                        <div id="matter-pool" class="flex flex-col space-y-2 lg:space-y-3 overflow-y-auto pb-4 overscroll-contain"></div>
+                    </div>
+                    
+                    <div class="flex flex-col flex-1 min-h-0 border-t border-slate-100 pt-3">
+                        <h2 class="text-[11px] lg:text-xs font-bold text-slate-400 mb-2 lg:mb-3 uppercase tracking-tighter">3. 內分泌激素</h2>
+                        <div id="hormone-pool" class="flex flex-col space-y-2 lg:space-y-3 overflow-y-auto pb-4 overscroll-contain"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -216,7 +220,6 @@
     </div>
 
     <script>
-        // 防止畫布在平板上拖曳時觸發網頁捲動，但放行側邊欄的滾動
         document.addEventListener('touchmove', function(e) {
             if (!e.target.closest('.overscroll-contain')) {
                 e.preventDefault();
@@ -376,8 +379,9 @@
                     const matterData = cardDataMap[data.attachedMatterId];
                     if (matterEl && matterData) {
                         const mWidth = matterEl.offsetWidth || 75;
-                        matterData.x = data.x + (140 - mWidth + 8); 
-                        matterData.y = data.y + (70 - 32 + 8);  
+                        // 更新吸附座標系：相容於縮小後的器官尺寸 133x66.5
+                        matterData.x = data.x + (133 - mWidth + 8); 
+                        matterData.y = data.y + (66.5 - 32 + 8);  
                         matterEl.style.setProperty('--x', `${matterData.x}px`);
                         matterEl.style.setProperty('--y', `${matterData.y}px`);
                     }
@@ -430,8 +434,9 @@
             oData.respirationDone = true;
 
             const canvas = document.getElementById('canvas');
-            const startX = oData.x + 70;
-            const startY = oData.y + 35;
+            // 更新呼吸動畫發射中心點：相容縮小尺寸 133x66.5
+            const startX = oData.x + 66.5;
+            const startY = oData.y + 33.25;
 
             const products = [
                 { name: "水", color: "#93c5fd", initDx: -80, initDy: -30, dx: -100, dy: -90 },
@@ -468,8 +473,9 @@
                         if (exName === "葡萄糖") {
                             const centerX = data.x + 37.5;
                             const centerY = data.y + 16;
-                            if (centerX >= oData.x && centerX <= oData.x + 140 &&
-                                centerY >= oData.y && centerY <= oData.y + 70) {
+                            // 更新粒線體判定範圍：相容縮小尺寸 133x66.5
+                            if (centerX >= oData.x && centerX <= oData.x + 133 &&
+                                centerY >= oData.y && centerY <= oData.y + 66.5) {
                                 
                                 const exCard = document.getElementById(oData.attachedMatterId);
                                 if(exCard) exCard.remove();
@@ -498,9 +504,9 @@
                 const slotRect = slotEl.getBoundingClientRect();
                 const canvasRect = document.getElementById('canvas').getBoundingClientRect();
                 
-                const sCenterX = slotRect.left - canvasRect.left + 37;
+                const sCenterX = slotRect.left - canvasRect.left + 37.5;
                 const sCenterY = slotRect.top - canvasRect.top + 16;
-                const dist = Math.hypot(data.x + 37 - sCenterX, data.y + 16 - sCenterY);
+                const dist = Math.hypot(data.x + 37.5 - sCenterX, data.y + 16 - sCenterY);
                 
                 if (dist < 45) {
                     if (oData.attachedMatterId) return; 
@@ -516,8 +522,9 @@
 
                     setTimeout(() => {
                         const mWidth = card.offsetWidth || 75;
-                        data.x = oData.x + (140 - mWidth + 8);
-                        data.y = oData.y + (70 - 32 + 8);
+                        // 更新吸附座標系：相容於縮小後的器官尺寸 133x66.5
+                        data.x = oData.x + (133 - mWidth + 8);
+                        data.y = oData.y + (66.5 - 32 + 8);
                         card.style.setProperty('--x', `${data.x}px`);
                         card.style.setProperty('--y', `${data.y}px`);
                     }, 10);
@@ -622,8 +629,9 @@
                 const f = cardDataMap[conn.fromId]; const t = cardDataMap[conn.toId];
                 if (!f || !t) return;
 
-                const x1 = f.x + 70, y1 = f.y + 35;
-                const x2 = t.x + 70, y2 = t.y + 35;
+                // 更新連線與箭頭計算的中心點：相容縮小尺寸 133x66.5
+                const x1 = f.x + 66.5, y1 = f.y + 33.25;
+                const x2 = t.x + 66.5, y2 = t.y + 33.25;
                 const dx = x2 - x1, dy = y2 - y1;
                 const dist = Math.hypot(dx, dy) || 1;
                 const offset = 14; 
